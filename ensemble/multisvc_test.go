@@ -1,8 +1,8 @@
 package ensemble
 
 import (
-	"github.com/sjwhitworth/golearn/base"
-	"github.com/sjwhitworth/golearn/evaluation"
+	"github.com/antongulenko/golearn/base"
+	"github.com/antongulenko/golearn/evaluation"
 	. "github.com/smartystreets/goconvey/convey"
 	"testing"
 )

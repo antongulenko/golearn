@@ -2,7 +2,7 @@ package neural
 
 import (
 	"github.com/gonum/matrix/mat64"
-	"github.com/sjwhitworth/golearn/base"
+	"github.com/antongulenko/golearn/base"
 	. "github.com/smartystreets/goconvey/convey"
 	"testing"
 )

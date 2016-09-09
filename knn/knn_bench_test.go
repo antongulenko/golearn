@@ -2,8 +2,8 @@ package knn
 
 import (
 	"fmt"
-	"github.com/sjwhitworth/golearn/base"
-	"github.com/sjwhitworth/golearn/evaluation"
+	"github.com/antongulenko/golearn/base"
+	"github.com/antongulenko/golearn/evaluation"
 	"testing"
 )
 

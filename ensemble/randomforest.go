@@ -3,9 +3,9 @@ package ensemble
 import (
 	"errors"
 	"fmt"
-	"github.com/sjwhitworth/golearn/base"
-	"github.com/sjwhitworth/golearn/meta"
-	"github.com/sjwhitworth/golearn/trees"
+	"github.com/antongulenko/golearn/base"
+	"github.com/antongulenko/golearn/meta"
+	"github.com/antongulenko/golearn/trees"
 )
 
 // RandomForest classifies instances using an ensemble

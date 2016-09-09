@@ -1,7 +1,7 @@
 package evaluation
 
 import (
-	"github.com/sjwhitworth/golearn/base"
+	"github.com/antongulenko/golearn/base"
 	"math/rand"
 )
 

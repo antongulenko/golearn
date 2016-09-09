@@ -1,9 +1,9 @@
 package ensemble
 
 import (
-	"github.com/sjwhitworth/golearn/base"
-	"github.com/sjwhitworth/golearn/linear_models"
-	"github.com/sjwhitworth/golearn/meta"
+	"github.com/antongulenko/golearn/base"
+	"github.com/antongulenko/golearn/linear_models"
+	"github.com/antongulenko/golearn/meta"
 )
 
 // MultiLinearSVC implements a multi-class Support Vector Classifier using a one-vs-all
