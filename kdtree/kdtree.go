@@ -3,7 +3,7 @@ package kdtree
 import (
 	"errors"
 	"github.com/gonum/matrix/mat64"
-	"github.com/sjwhitworth/golearn/metrics/pairwise"
+	"github.com/antongulenko/golearn/metrics/pairwise"
 	"sort"
 )
 
