@@ -4,38 +4,48 @@
 package knn
 
 import (
+	"errors"
 	"fmt"
+
 	"github.com/gonum/matrix"
 	"github.com/gonum/matrix/mat64"
 	"github.com/antongulenko/golearn/base"
+	"github.com/antongulenko/golearn/kdtree"
 	"github.com/antongulenko/golearn/metrics/pairwise"
 	"github.com/antongulenko/golearn/utilities"
 )
 
-// A KNNClassifier consists of a data matrix, associated labels in the same order as the matrix, and a distance function.
-// The accepted distance functions at this time are 'euclidean' and 'manhattan'.
+// A KNNClassifier consists of a data matrix, associated labels in the same order as the matrix, searching algorithm, and a distance function.
+// The accepted distance functions at this time are 'euclidean', 'manhattan', and 'cosine'.
+// The accepted searching algorithm here are 'linear', and 'kdtree'.
 // Optimisations only occur when things are identically group into identical
 // AttributeGroups, which don't include the class variable, in the same order.
+// Using weighted KNN when Weighted set to be true (default: false).
 type KNNClassifier struct {
 	base.BaseEstimator
 	TrainingData       base.FixedDataGrid
 	DistanceFunc       string
+	Algorithm          string
 	NearestNeighbours  int
 	AllowOptimisations bool
+	Weighted           bool
 }
 
 // NewKnnClassifier returns a new classifier
-func NewKnnClassifier(distfunc string, neighbours int) *KNNClassifier {
+func NewKnnClassifier(distfunc, algorithm string, neighbours int) *KNNClassifier {
 	KNN := KNNClassifier{}
 	KNN.DistanceFunc = distfunc
+	KNN.Algorithm = algorithm
 	KNN.NearestNeighbours = neighbours
+	KNN.Weighted = false
 	KNN.AllowOptimisations = true
 	return &KNN
 }
 
 // Fit stores the training data for later
-func (KNN *KNNClassifier) Fit(trainingData base.FixedDataGrid) {
+func (KNN *KNNClassifier) Fit(trainingData base.FixedDataGrid) error {
 	KNN.TrainingData = trainingData
+	return nil
 }
 
 func (KNN *KNNClassifier) canUseOptimisations(what base.FixedDataGrid) bool {
@@ -89,7 +99,7 @@ func (KNN *KNNClassifier) canUseOptimisations(what base.FixedDataGrid) bool {
 }
 
 // Predict returns a classification for the vector, based on a vector input, using the KNN algorithm.
-func (KNN *KNNClassifier) Predict(what base.FixedDataGrid) base.FixedDataGrid {
+func (KNN *KNNClassifier) Predict(what base.FixedDataGrid) (base.FixedDataGrid, error) {
 	// Check what distance function we are using
 	var distanceFunc pairwise.PairwiseDistanceFunc
 	switch KNN.DistanceFunc {
@@ -97,21 +107,29 @@ func (KNN *KNNClassifier) Predict(what base.FixedDataGrid) base.FixedDataGrid {
 		distanceFunc = pairwise.NewEuclidean()
 	case "manhattan":
 		distanceFunc = pairwise.NewManhattan()
+	case "cosine":
+		distanceFunc = pairwise.NewCosine()
 	default:
-		panic("unsupported distance function")
+		return nil, errors.New("unsupported distance function")
 	}
+
+	// Check what searching algorith, we are using
+	if KNN.Algorithm != "linear" && KNN.Algorithm != "kdtree" {
+		return nil, errors.New("unsupported searching algorithm")
+	}
+
 	// Check Compatibility
 	allAttrs := base.CheckCompatible(what, KNN.TrainingData)
 	if allAttrs == nil {
 		// Don't have the same Attributes
-		return nil
+		return nil, errors.New("attributes not compatible")
 	}
 
 	// Use optimised version if permitted
-	if KNN.AllowOptimisations {
+	if KNN.Algorithm == "linear" && KNN.AllowOptimisations {
 		if KNN.DistanceFunc == "euclidean" {
 			if KNN.canUseOptimisations(what) {
-				return KNN.optimisedEuclideanPredict(what.(*base.DenseInstances))
+				return KNN.optimisedEuclideanPredict(what.(*base.DenseInstances)), nil
 			}
 		}
 	}
@@ -142,7 +160,8 @@ func (KNN *KNNClassifier) Predict(what base.FixedDataGrid) base.FixedDataGrid {
 	distances := make(map[int]float64)
 
 	// Reserve storage for voting map
-	maxmap := make(map[string]int)
+	maxmapInt := make(map[string]int)
+	maxmapFloat := make(map[string]float64)
 
 	// Reserve storage for row computations
 	trainRowBuf := make([]float64, len(allNumericAttrs))
@@ -151,11 +170,33 @@ func (KNN *KNNClassifier) Predict(what base.FixedDataGrid) base.FixedDataGrid {
 	_, maxRow := what.Size()
 	curRow := 0
 
+	// build kdtree if algorithm is 'kdtree'
+	kd := kdtree.New()
+	srcRowNoMap := make([]int, 0)
+	if KNN.Algorithm == "kdtree" {
+		buildData := make([][]float64, 0)
+		KNN.TrainingData.MapOverRows(trainAttrSpecs, func(trainRow [][]byte, srcRowNo int) (bool, error) {
+			oneData := make([]float64, len(allNumericAttrs))
+			// Read the float values out
+			for i, _ := range allNumericAttrs {
+				oneData[i] = base.UnpackBytesToFloat(trainRow[i])
+			}
+			srcRowNoMap = append(srcRowNoMap, srcRowNo)
+			buildData = append(buildData, oneData)
+			return true, nil
+		})
+
+		err := kd.Build(buildData)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// Iterate over all outer rows
 	what.MapOverRows(whatAttrSpecs, func(predRow [][]byte, predRowNo int) (bool, error) {
 
 		if (curRow%1) == 0 && curRow > 0 {
-			fmt.Printf("KNN: %.2f %% done\n", float64(curRow)*100.0/float64(maxRow))
+			fmt.Printf("KNN: %.2f %% done\r", float64(curRow)*100.0/float64(maxRow))
 		}
 		curRow++
 
@@ -166,30 +207,67 @@ func (KNN *KNNClassifier) Predict(what base.FixedDataGrid) base.FixedDataGrid {
 
 		predMat := utilities.FloatsToMatrix(predRowBuf)
 
-		// Find the closest match in the training data
-		KNN.TrainingData.MapOverRows(trainAttrSpecs, func(trainRow [][]byte, srcRowNo int) (bool, error) {
-			// Read the float values out
-			for i, _ := range allNumericAttrs {
-				trainRowBuf[i] = base.UnpackBytesToFloat(trainRow[i])
+		switch KNN.Algorithm {
+		case "linear":
+			// Find the closest match in the training data
+			KNN.TrainingData.MapOverRows(trainAttrSpecs, func(trainRow [][]byte, srcRowNo int) (bool, error) {
+				// Read the float values out
+				for i, _ := range allNumericAttrs {
+					trainRowBuf[i] = base.UnpackBytesToFloat(trainRow[i])
+				}
+
+				// Compute the distance
+				trainMat := utilities.FloatsToMatrix(trainRowBuf)
+				distances[srcRowNo] = distanceFunc.Distance(predMat, trainMat)
+				return true, nil
+			})
+
+			sorted := utilities.SortIntMap(distances)
+			values := sorted[:KNN.NearestNeighbours]
+
+			length := make([]float64, KNN.NearestNeighbours)
+			for k, v := range values {
+				length[k] = distances[v]
 			}
 
-			// Compute the distance
-			trainMat := utilities.FloatsToMatrix(trainRowBuf)
-			distances[srcRowNo] = distanceFunc.Distance(predMat, trainMat)
-			return true, nil
-		})
+			var maxClass string
+			if KNN.Weighted {
+				maxClass = KNN.weightedVote(maxmapFloat, values, length)
+			} else {
+				maxClass = KNN.vote(maxmapInt, values)
+			}
+			base.SetClass(ret, predRowNo, maxClass)
 
-		sorted := utilities.SortIntMap(distances)
-		values := sorted[:KNN.NearestNeighbours]
+		case "kdtree":
+			// search kdtree
+			values, length, err := kd.Search(KNN.NearestNeighbours, distanceFunc, predRowBuf)
+			if err != nil {
+				return false, err
+			}
 
-		maxClass := KNN.vote(maxmap, values)
+			// map values to srcRowNo
+			for k, v := range values {
+				values[k] = srcRowNoMap[v]
+			}
 
-		base.SetClass(ret, predRowNo, maxClass)
+			var maxClass string
+			if KNN.Weighted {
+				maxClass = KNN.weightedVote(maxmapFloat, values, length)
+			} else {
+				maxClass = KNN.vote(maxmapInt, values)
+			}
+			base.SetClass(ret, predRowNo, maxClass)
+		}
+
 		return true, nil
 
 	})
 
-	return ret
+	return ret, nil
+}
+
+func (KNN *KNNClassifier) String() string {
+	return fmt.Sprintf("KNNClassifier(%s, %d)", KNN.DistanceFunc, KNN.NearestNeighbours)
 }
 
 func (KNN *KNNClassifier) vote(maxmap map[string]int, values []int) string {
@@ -211,6 +289,34 @@ func (KNN *KNNClassifier) vote(maxmap map[string]int, values []int) string {
 	// Sort the maxMap
 	var maxClass string
 	maxVal := -1
+	for a := range maxmap {
+		if maxmap[a] > maxVal {
+			maxVal = maxmap[a]
+			maxClass = a
+		}
+	}
+	return maxClass
+}
+
+func (KNN *KNNClassifier) weightedVote(maxmap map[string]float64, values []int, length []float64) string {
+	// Reset maxMap
+	for a := range maxmap {
+		maxmap[a] = 0
+	}
+
+	// Refresh maxMap
+	for k, elem := range values {
+		label := base.GetClass(KNN.TrainingData, elem)
+		if _, ok := maxmap[label]; ok {
+			maxmap[label] += (1 / length[k])
+		} else {
+			maxmap[label] = (1 / length[k])
+		}
+	}
+
+	// Sort the maxMap
+	var maxClass string
+	maxVal := -1.0
 	for a := range maxmap {
 		if maxmap[a] > maxVal {
 			maxVal = maxmap[a]

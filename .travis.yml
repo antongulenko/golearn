@@ -3,8 +3,8 @@ go:
  - 1.4
  - 1.5
  - 1.6
- - release
- - tip
+ - 1.7
+ - 1.8
 env:
  # Temporary workaround for go 1.6
  - GODEBUG=cgocheck=0

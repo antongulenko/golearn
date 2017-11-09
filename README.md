@@ -48,15 +48,17 @@ func main() {
 	fmt.Println(rawData)
 
 	//Initialises a new KNN classifier
-	cls := knn.NewKnnClassifier("euclidean", 2)
+	cls := knn.NewKnnClassifier("euclidean", "linear", 2)
 
 	//Do a training-test split
 	trainData, testData := base.InstancesTrainTestSplit(rawData, 0.50)
 	cls.Fit(trainData)
 
 	//Calculates the Euclidean distance and returns the most popular label
-	predictions := cls.Predict(testData)
-	fmt.Println(predictions)
+	predictions, err := cls.Predict(testData)
+	if err != nil {
+		panic(err)
+	}
 
 	// Prints precision/recall metrics
 	confusionMat, err := evaluation.GetConfusionMatrix(testData, predictions)
@@ -91,6 +93,13 @@ go run instances.go
 cd $GOPATH/src/github.com/sjwhitworth/golearn/examples/trees
 go run trees.go
 ```
+
+Docs
+====
+
+ * [English](https://github.com/sjwhitworth/golearn/wiki)
+ * [中文文档(简体)](doc/zh_CN/Home.md)
+ * [中文文档(繁体)](doc/zh_TW/Home.md)
 
 Join the team
 =============
