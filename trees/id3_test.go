@@ -2,7 +2,7 @@ package trees
 
 import (
 	"fmt"
-	"github.com/sjwhitworth/golearn/base"
+	"github.com/antongulenko/golearn/base"
 	. "github.com/smartystreets/goconvey/convey"
 	"testing"
 )
