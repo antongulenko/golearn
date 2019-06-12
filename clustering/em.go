@@ -147,7 +147,9 @@ func maximization(X *mat.Dense, y mat.Vector, p Params, n_comps int) Params {
 			covs_k = shrunkCovariance(X_yk)
 		} else {
 			p_new.Means.SetRow(k, means(X_yk))
-			covs_k = stat.CovarianceMatrix(nil, X_yk, nil)
+			var covs_dense mat.SymDense
+			covs_k = &covs_dense
+			stat.CovarianceMatrix(&covs_dense, X_yk, nil)
 		}
 		reg := mat.NewSymDense(n_feats, symVals(n_feats, 0.000001))
 		covs_k_reg := mat.NewSymDense(n_feats, nil)
